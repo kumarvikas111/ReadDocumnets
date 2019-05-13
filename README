@@ -1,0 +1,43 @@
+	This repo is basically a collecteion of the books & notes on below:
+
+		├── interview_write_up
+		│   ├── add_sys_call.pdf
+		│   ├── Coding_Interview.pdf
+		│   ├── C_Programming_Compilation_Process.pdf
+		│   ├── Embedded-C.pdf
+		│   ├── Embedded.pdf
+		│   ├── LDD-Interview.pdf
+		│   ├── libelf-by-example.pdf
+		│   ├── S08-05.pdf
+		│   ├── String.pdf
+		│   ├── touch_apptest.txt
+		│   └── touch_screen.txt
+		├── linux
+		│   ├── Beginning Linux Programming, 4 Ed.pdf
+		│   ├── Essential Linux Device Drivers[2008,851p].pdf
+		│   ├── Essential Linux Device Drivers.pdf
+		│   ├── LDD3e.pdf
+		│   ├── linux-insides.pdf
+		│   ├── Professional_cpp.pdf
+		│   ├── Professional_git.pdf
+		│   └── ProfessionalLinuxKernelArchitecture-WolfgangMauerer.pdf
+		├── output.pdf
+		├── rrb
+		│   └── Heat Engine.pdf
+		└── wlan
+		    ├── 802.11-2012.pdf
+		    ├── 802.11 Wireless Networks The Definitive Guide.pdf
+		    ├── 802dot11ac_A_Survival_Guide.pdf
+		    ├── Comprarision_of standareds.jpg
+		    ├── CWAP_WLAN_Analysis.pdf
+		    ├── ieee80211handbook.pdf
+		    ├── tektronix_wifi_solutions_802.11_datasheet.pdf
+			  ├── WAVE-2.pdf
+			  ├── Wi-Fi_Test_Suite_Control_API.pdf
+			  ├── wireless-networks-wi-fi-evolution.pdf
+			  ├── Wireless-WIFI-Telemebrtry.pdf
+			  ├── WLANEvolution.png
+			  └── wmm-specification-1-1.pdf
+
+		
+
