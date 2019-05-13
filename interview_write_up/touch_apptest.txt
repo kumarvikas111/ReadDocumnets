@@ -1,0 +1,64 @@
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <fcntl.h>
+
+#define SIG_TOUCH 45 /* we define our own signal, hard coded since SIGRTMIN is different in user and in kernel space */ 
+
+int configfdt;
+char tbuff[5];
+
+union Tpos1
+{
+unsigned short ipos;
+char cpos[2];
+}posx,posy;
+
+void receiveData(int n, siginfo_t *info, void *unused) 
+{
+        if(read(configfdt,tbuff,4,0)==4)   
+        {
+        posx.cpos[0] = tbuff[0];
+        posx.cpos[1] = tbuff[1];
+        posy.cpos[0] = tbuff[2];
+        posy.cpos[1] = tbuff[3];   
+	printf("X cord:  %d\n", posx.ipos);
+	printf("Y cord:  %d\n", posy.ipos);
+	}
+	else
+	printf("Read Error\n");
+}
+
+int main ( int argc, char **argv )
+{
+	
+	char buf[10];
+	/* setup the signal handler for SIG_TEST 
+ 	 * SA_SIGINFO -> we want the signal handler function with 3 arguments
+ 	 */
+	struct sigaction sig;
+	sig.sa_sigaction = receiveData;
+	sig.sa_flags = SA_SIGINFO;
+	sigaction(SIG_TOUCH, &sig, NULL);
+
+	/* kernel needs to know our pid to be able to send us a signal ->
+ 	 * we use debugfs for this -> do not forget to mount the debugfs!
+ 	 */
+	configfdt = open("/dev/touchscreen", O_RDWR);
+	if(configfdt < 0) 
+	{
+		perror("open");
+		return -1;
+	}
+	sprintf(buf, "%i", getpid());
+	if (write(configfdt, buf, strlen(buf) + 1) < 0) 
+	{
+		perror("fwrite"); 
+		return -1;
+	}
+	
+	while(1); //wait for ever;;
+	
+	return 0;
+}
+

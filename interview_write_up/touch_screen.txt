@@ -1,0 +1,566 @@
+//#include <mach/lpc178x.h>
+#include<mach/rlpc177x_8x.h>
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <asm/uaccess.h>
+#include <linux/interrupt.h>
+#include<mach/core_cm3.h>
+
+#include <mach/lpc177x_8x_pinsel.h>
+#include <mach/lpc177x_8x_gpio.h>
+#include <mach/lpc177x_8x_adc.h>
+#include <asm/siginfo.h>	//siginfo
+#include <linux/rcupdate.h>	//rcu_read_lock
+#include <linux/sched.h>	//find_task_by_pid_type
+#include <linux/debugfs.h>
+
+#define EINT0 1
+#define SIG_TOUCH 45	// we choose 44 as our signal number (real-time signals are in the range of 33 to 64)
+
+volatile unsigned int i,j,a,l,m,k,p; 
+unsigned int y=0x1000,hastouch;
+unsigned char x, s[6]={'\0','\0','\0','\0','\0','\0'}, t[6]={'\0','\0','\0','\0','\0','\0'};
+unsigned int touchx1,touchx2,touchx3,touchx4,touchy1,touchy2,touchy3,touchy4,touchx,touchy;	
+unsigned int samplex1,samplex2,sampley1,sampley2,samplex,sampley,offsetx1,offsety1,offsetx,offsety,countx,county;
+
+/*variable for the interrupt*/
+uint32_t temp1, tmp, temp;
+uint32_t adc_value;
+uint32_t *pPIN = NULL;
+
+union Tpos
+{
+unsigned short ipos;
+char cpos[2];
+}posx,posy;
+
+
+static char kDataArrived=0;
+static int pid = 0;	
+struct siginfo info;
+struct task_struct *tsk;
+int ret =0;
+
+//static char touchscreen_str[] = "This is the simplest loadable kernel module\n";
+
+struct tdevice{
+char* name;
+
+}tdev;
+
+
+unsigned int iValue1,iValue2,iValue3;
+
+
+static irqreturn_t __lpc_key_isr (int irq, void *dev_id) 
+{	
+	
+	NVIC_DisableIRQ(GPIO_IRQn);
+	//printk(KERN_ALERT "i entered into  ISR\n");
+	//printk(KERN_ALERT"%d\n",(((LPC_GPIOINT->IO0IntStatF)>>0x00001000)& 0x1));
+	//if((((LPC_GPIOINT->IO0IntStatF)>>0x00001000)& 0x1)/*(GPIO_GetIntStatus(0,0x00001000,1))*/==0)
+	
+	//	printk(KERN_ALERT" i entered inside the interrupt");
+		//GPIO_ClearInt(0,0x00001000);
+		//LPC_GPIOINT->IO0IntClr=(1<<12);
+	//	printk(KERN_ALERT" interrupt is cleared\n");
+		//        X+      Y+     X-     Y-
+   //            -----  -----  -----  -----
+   //         LPC1788   P0.12  P0.13  P0.10  P0.11
+   
+   iValue1 = LPC_IOCON->P0_10;
+   //printk("%X\n", iValue1);
+    iValue1= LPC_IOCON->P0_11;
+   // printk("%X\n", iValue1);
+    iValue1 = LPC_IOCON->P0_12;
+    //printk("%X\n", iValue1);
+   
+   
+		for(k=0;k<500;k++)
+		{
+			for(p=0;p<100;p++);
+		}
+		if(LPC_GPIO0->PIN & (1<<12))
+		{
+		}
+		else
+		{
+			i=0; j=0;
+		//printk(KERN_ALERT "Reading X & Y values\n");
+			for(a=0;a<16;a++)
+			{
+//--------------------------------------------------Starting of Read X--------------------------------------------------//	
+				   	LPC_IOCON->P0_12&=0; //X+ - uncomment to rollback
+					
+					//LPC_IOCON->P0_12&=(~((1<<3)|(1<<4)));
+					LPC_GPIO0->DIR |= (1<<12);   //p0.12 set as output X+ as output
+					LPC_GPIO0->SET |= (1<<12);  //p0.12 set to high X+ == 1
+
+					
+					LPC_IOCON->P0_10&=0;//X- == 0
+					//LPC_IOCON->P0_10&=(~((1<<3)|(1<<4)));
+					LPC_GPIO0->DIR |= (1<<10);  	//p0.10 as output X- as o/p
+					LPC_GPIO0->CLR  |= (1<<10);  //p0.10 set to low X- = 0
+
+                                        LPC_IOCON->P0_11&=(~((1<<3)|(1<<4))); //
+					LPC_GPIO0->DIR &= (~(1<<11));	 //p0.11 as input Y- as i/p
+	                              
+	                       
+	                           
+	                           
+					//PINSEL_ConfigPin(0,13,3);//p0.13 set as adc0.1
+						pPIN = (uint32_t *)(LPC_IOCON_BASE + ((0 * 32 + 13)*sizeof(uint32_t)));;
+						*pPIN &= 0x00000007;//Clear function bits
+						*pPIN |=3;
+	//					printk(KERN_ALERT" pinconfig is completed for x\n");
+					//
+					//ADC_Init(LPC_ADC,400000);
+						LPC_SC->PCONP |= ((uint32_t)(1<<12));
+						LPC_ADC->CR = 0;
+						tmp = ADC_CR_PDN;
+						temp =60000000;
+		
+						temp = (temp /(400000* 31)) - 1;
+					
+						tmp |=  ADC_CR_CLKDIV(temp);
+						LPC_ADC->CR = tmp;
+					//	printk(KERN_ALERT" Adc init is completed for x\n");
+					//
+				   	//ADC_ChannelCmd (LPC_ADC,7,1);
+				   		LPC_ADC->CR |= ADC_CR_CH_SEL(7);
+				   	
+				   	//	printk(KERN_ALERT" ADC channel is set\n");
+				   	//
+				   //	ADC_StartCmd(LPC_ADC,ADC_START_NOW);
+				   		LPC_ADC->CR  &= ~ADC_CR_START_MASK;
+						LPC_ADC->CR |=ADC_CR_START_MODE_SEL((uint32_t)ADC_START_NOW);
+							
+					//	printk(KERN_ALERT"ADC start command\n");
+				   //
+				   	//	while(!(ADC_ChannelGetStatus(LPC_ADC,7,1)));
+					
+					
+					do 
+					{
+						temp1 =  *(uint32_t *) ((&LPC_ADC->DR[0]) +7);
+						temp1 &= ADC_DR_DONE_FLAG;
+					}while(!temp1);
+			
+					//printk(KERN_ALERT"flag is checked\n");
+					//
+				   
+				   //	i=i+((ADC_ChannelGetData(LPC_ADC,7)));
+				   
+				   	adc_value = *(uint32_t *) ((&LPC_ADC->DR[0]) + 7);
+				   	i=i+( ADC_DR_RESULT(adc_value));
+				   	//printk(KERN_ALERT" adc value is taken\n");
+				   	
+	//--------------------------------------------------Ending of Read X--------------------------------------------------
+       //--------------------------------------------------Starting of Read Y--------------------------------------------------	
+					LPC_IOCON->P0_13&=0;
+					LPC_IOCON->P0_11&=0;
+	
+					LPC_GPIO0->CLR &= (~(1<<13));
+					LPC_GPIO0->DIR |= (1<<13);    //p0.13 set as output
+					LPC_GPIO0->SET |= (1<<13);   //p0.13 set to high
+
+					LPC_GPIO0->DIR |= (1<<11);   //p0.11 set as output
+					LPC_GPIO0->CLR |= (1<<11);  //p0.11 set to low
+
+					LPC_GPIO0->DIR &=(~(1<<10));   //p0.10 set as input
+	
+				//	PINSEL_ConfigPin(0,12,3);	// p0.12 set as adc0.0
+					pPIN = (uint32_t *)(LPC_IOCON_BASE + ((0 * 32 + 12)*sizeof(uint32_t)));;
+						*pPIN &= 0x00000007;//Clear function bits
+						*pPIN |=3;
+						
+						
+				//
+					//ADC_Init(LPC_ADC,400000);
+						LPC_SC->PCONP |= ((uint32_t)(1<<12));
+						LPC_ADC->CR = 0;
+						tmp = ADC_CR_PDN;
+						temp =60000000;
+						temp = (temp /(400000* 31)) - 1;
+						
+						tmp|=  ADC_CR_CLKDIV(temp);
+						LPC_ADC->CR = tmp;
+					//
+				   	//ADC_ChannelCmd (LPC_ADC,6,1);
+				   		LPC_ADC->CR |= ADC_CR_CH_SEL(6);
+				   	//
+				   	//ADC_StartCmd(LPC_ADC,ADC_START_NOW);
+				   		LPC_ADC->CR &= ~ADC_CR_START_MASK;
+						LPC_ADC->CR |=ADC_CR_START_MODE_SEL((uint32_t)ADC_START_NOW);
+				   	//
+				   	//while(!(ADC_ChannelGetStatus(LPC_ADC,6,1)));
+				   	//temp1 =  *(uint32_t *) ((&LPC_ADC->DR[0]) +6);
+					do
+					{
+						temp1 =  *(uint32_t *) ((&LPC_ADC->DR[0]) +6);
+						temp1 &= ADC_DR_DONE_FLAG;
+					}while(!temp1);
+					
+					
+						   	//
+				   	//j=j+((ADC_ChannelGetData(LPC_ADC,6)));
+				   		adc_value = *(uint32_t *) ((&LPC_ADC->DR[0]) + 6);
+				   		j=j+( ADC_DR_RESULT(adc_value));
+				   	//
+	//--------------------------------------------------Ending of Read Y--------------------------------------------------
+
+			}
+			l=i/16;
+			m=j/16;
+			hastouch=1;
+			/*if(countx!=0)
+			{
+				l=((((l-offsetx)*10)/countx));
+				m=((((m-offsety)*10)/county));
+				m=(240-(m));
+			}*/
+			//else
+			//{
+				touchx=l;
+				touchy=m;
+			//}
+			posx.ipos =l;
+  			posy.ipos =m;
+  			
+  			
+
+	//		y=100;
+	//		for(x=0; x<4; x++)
+	//		{
+				//				 	//l=0xffff;
+	//			if(x==0)
+	//				s[x]='x';
+	//			else
+	//			{
+	//				s[x]=((l/y)+0x30);
+	//				l = l % y;
+	//				y=y/(10);
+	//			}	
+	//		}
+	//		y=100;
+	//		for(x=0; x<4; x++)
+	//		{
+				//				 	
+	//			if(x==0)
+	//				t[x]='y';
+	//			else
+	//			{
+	//				t[x]=((m/y)+0x30);
+	//				m=m%y;	
+	//				y=y/(10);
+	//			}
+	//		}	
+
+		//printk(KERN_ALERT "%d\n",l);
+		//printk(KERN_ALERT "%d\n",m);
+		
+	kDataArrived = 0x01;
+        if(pid!=0)
+        {
+        memset(&info, 0, sizeof(struct siginfo));
+	info.si_signo = SIG_TOUCH;
+	info.si_code = SI_QUEUE;
+/*
+*************************************************************************************************************************	
+Read-copy-update (RCU) is a mutual exclusion technique which can operate without locking most of the time. It can yield significant performance benefits when the data to be protected is accessed via a pointer, is read frequently, changed rarely, and references to the structure are not held while a kernel thread sleeps. The core idea behind RCU is that, when the data requires updating, a pointer to a new structure containing the new data can be stored immediately. The old structure containing the outdated data can then be freed at leisure, after it is certain that no process in the system holds a reference to that structure. For details on the ideas behind RCU, see this LWN article, or (for many details) this paper. Just don't ask SCO, even though they claim to own the technique.
+						http://lwn.net/Articles/37889/
+**************************************************************************************************************************/	
+	rcu_read_lock();
+	tsk = pid_task(find_vpid(pid),PIDTYPE_PID);  //find the task_struct associated with this pid
+	if(t == NULL)
+	{
+		rcu_read_unlock();
+		return -ENODEV;
+	}
+	rcu_read_unlock();
+	ret = send_sig_info(SIG_TOUCH, &info, tsk);    //send the signal
+	if (ret < 0) 
+	{
+		return ret;
+	}
+       
+      }
+
+		//reconfigure pins before going to main
+		}
+		//--------------------------Touchscreen Detect Config------------------------
+	
+	
+	       //        X+      Y+     X-     Y-
+   //            -----  -----  -----  -----
+   //  LPC1788   P0.12  P0.13  P0.10  P0.11
+   
+		LPC_IOCON->P0_13 &=0;
+		LPC_IOCON->P0_13 |=(1<<7);//p0.13 set as digital i/p with on pullup
+		LPC_GPIO0->DIR &= (~(1<<13)); // y+ input;;
+		
+		LPC_IOCON->P0_10&=0; //p0.10 as input with no pullup
+		LPC_GPIO0->DIR &= (~(1<<10)); // x- input;;
+
+		LPC_IOCON->P0_11&=0;
+		
+		LPC_GPIO0->DIR |= (1<<11);	 //p0.11 as output y-
+		LPC_GPIO0->CLR |= (1<<11);  //p0.11 set to low
+	
+	        LPC_GPIO0->DIR &= (~(1<<12));	 //p0.12 as input x+
+		LPC_IOCON->P0_12|=((1<<7)|(1<<4));//p0.12 set as digital i/p with pullup
+	
+	/*------------------------------End of Touchscreen Detect Config------------------------*/
+
+
+		//GPIO_IntCmd(0,0x00001000,1);
+			LPC_GPIOINT->IO0IntEnF |=(1<<12); 
+			LPC_GPIOINT->IO0IntClr |=(1<<12);
+		//
+	NVIC_EnableIRQ(GPIO_IRQn);
+
+ /*iValue1 = LPC_IOCON->P0_10;
+   printk("%X\n", iValue1);
+    iValue1= LPC_IOCON->P0_11;
+    printk("%X\n", iValue1);
+    iValue1 = LPC_IOCON->P0_12;
+    printk("%X\n", iValue1);
+	*/	
+	return 0;
+}	 
+
+  
+
+//------------------------------------------------------------------------------------------------------------------driver touchscreen------------------------------
+
+/*
+ * touchscreen.c - The simplest loadable kernel module.
+ * Intended as a template for development of more
+ * meaningful kernel modules.
+ */
+
+
+/*
+ * Driver verbosity level: 0->silent; >0->verbose
+ */
+static int touchscreen_debug = 0;
+
+/*
+ * User can change verbosity of the driver
+ */
+module_param(touchscreen_debug, int, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(touchscreen_debug, "touchscreen driver verbosity level");
+
+/*
+ * Service to print debug messages
+ */
+#define d_printk(level, fmt, args...)				\
+	if (touchscreen_debug >= level) printk(KERN_INFO "%s: " fmt,	\
+					__func__, ## args)
+
+/*
+ * Device major number
+ */
+static uint touchscreen_major = 181;
+
+/*
+ * User can change the major number
+ */
+module_param(touchscreen_major, uint, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(touchscreen_major, "touchscreen driver major number");
+
+/*
+ * Device name
+ */
+static char * touchscreen_name = "touchscreen";
+
+/*
+ * Device access lock. Only one process can access the driver at a time
+ */
+static int touchscreen_lock = 0;
+
+/*
+ * Device "data"
+ */
+
+//static char *touchscreen_end;
+
+/*
+ * Device open
+ */
+static int touchscreen_open(struct inode *inode, struct file *file)
+{
+	/*
+	 * One process at a time
+	 */
+	if (touchscreen_lock ++ > 0) 
+	{
+		return(-EBUSY);
+	}
+
+	/*
+ 	 * Increment the module use counter
+ 	 */
+	try_module_get(THIS_MODULE);
+	
+	kDataArrived = 0;
+        pid = 0;
+	return (0);
+}
+
+/*
+ * Device close
+ */
+static int touchscreen_release(struct inode *inode, struct file *file)
+{
+	/*
+ 	 * Release device
+ 	 */
+	touchscreen_lock = 0;
+
+	/*
+ 	 * Decrement module use counter
+ 	 */
+	module_put(THIS_MODULE);
+
+	return 0;
+}
+
+/* 
+ * Device read
+ */
+static ssize_t touchscreen_read(struct file *filp, char *buffer,
+			 size_t length, loff_t * offset)
+{
+
+	/*
+ 	 * Check that the user has supplied a valid buffer
+ 	 */
+ 	 if(length <  4)
+ 	 {
+ 	    printk("INSUFFICIENT BUFFER\n");
+	    return(-EINVAL);
+ 	 }
+ 	 
+	if (! access_ok(0, buffer, length)) 
+	{
+	       printk("ACCESS VIOLATION\n");
+		 return(-EINVAL);
+	}
+	
+	if(kDataArrived != 0x01) // no data;;
+	{
+	 printk("NO DATA\n");
+	  return(0);
+	}
+	
+	put_user(posx.cpos[0], buffer);
+	put_user(posx.cpos[1], buffer+1);
+	put_user(posy.cpos[0], buffer+2);
+	put_user(posy.cpos[1], buffer+3);
+	
+	kDataArrived = 0x00;
+	
+	return (4);
+	}
+
+/* 
+ * Device write
+ */
+static ssize_t touchscreen_write(struct file *filp, const char *buffer,
+			  size_t length, loff_t * offset)
+{
+	char tbuff[10];
+	/* read the value from user space */
+	if(length > 10)
+		return (-EINVAL);
+		
+	copy_from_user(tbuff, buffer, length);
+	sscanf(tbuff, "%d", &pid);
+	printk("Registered pid = %d\n", pid);
+	return (0);
+}
+
+/*
+ * Device operations
+ */	
+static struct file_operations touchscreen_fops = {
+	.read = touchscreen_read,
+	.write = touchscreen_write,
+	.open = touchscreen_open,
+	.release = touchscreen_release
+};
+
+static int __init touchscreen_init_module(void)
+{
+	int ret = 0;
+	
+	/*
+ 	 * Register device
+ 	 */
+ 	 printk(KERN_ALERT " Hello World123\n" );
+ 	 
+	NVIC_DisableIRQ(GPIO_IRQn);
+	ret = register_chrdev(touchscreen_major, touchscreen_name, &touchscreen_fops);
+	if (ret < 0) {
+		printk(KERN_ALERT "%s: registering device %s with major %d "
+				  "failed with %d\n",
+		       __func__, touchscreen_name, touchscreen_major, ret);
+		       	goto Done;
+		       }
+	
+	
+	//LPC_IOCON->P0_13 &=0;
+	LPC_IOCON->P0_13 |=1<<7;//p0.13 set as digital i/p with on pullup
+	LPC_IOCON->P0_10&=0; //p0.10 as input with no pullup
+	
+	LPC_IOCON->P0_11&=0;
+	LPC_GPIO0->DIR |= (1<<11);	 //p0.11 as output
+	LPC_GPIO0->CLR |= 1<<11;  //p0.11 set to low
+	
+	LPC_IOCON->P0_12 |=((1<<7)|(1<<4));//p0.12 set as digital i/p with pullup
+	
+	
+	/*----------------------------Intcmd-------------*/
+	//GPIO_IntCmd(0,0x00001000,1);
+	
+	//#LPC_GPIOINT->IO0IntEnF=(1<<12); 
+	
+	LPC_GPIOINT->IO0IntEnF|=(1<<12); 
+	
+	/*----------------------------Intcmd-------------*/
+	
+	 NVIC_SetPriority(GPIO_IRQn, 1);
+	
+	/*----------------------------Touchscreen Detect Config------------------------*/
+	 NVIC_EnableIRQ(GPIO_IRQn);
+	/*------------------------------End of Touchscreen Detect Config------------------------*/
+	printk(KERN_ALERT "irq registered trying to register\n");
+	ret = request_irq(38, __lpc_key_isr, 0, touchscreen_name, &tdev);
+	if (ret >= 0)
+	
+	
+Done:
+	d_printk(1, "name=%s,major=%d\n", touchscreen_name, touchscreen_major);
+	printk(KERN_ALERT " Hello World12\n" );
+	return ret;
+}
+
+static void __exit touchscreen_cleanup_module(void)
+{
+	/*
+	 * Unregister device
+	 */
+	unregister_chrdev(touchscreen_major, touchscreen_name);
+
+	d_printk(1, "%s\n", "clean-up successful");
+}
+
+module_init(touchscreen_init_module);
+module_exit(touchscreen_cleanup_module);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Shrey, shrey@eilabz.com");
+MODULE_DESCRIPTION("touchscreen device driver");	
